@@ -40,11 +40,11 @@ const NavPlayer = () => {
         }
     }
 
-    // do an immediate fetch and then refresh every 30 seconds
+    // do an immediate fetch and then refresh every 10 seconds
     useEffect(() => {
         fetchNowPlaying();
 
-        const interval = setInterval(fetchNowPlaying, 30000);
+        const interval = setInterval(fetchNowPlaying, 10000);
         return () => clearInterval(interval);
     }, []);
 
@@ -114,7 +114,8 @@ const NavPlayer = () => {
                 <div className="hidden shrink-0 items-center lg:flex">
                     <img
                         src={isPlaying ? "/soundwaves.gif" : "/staticsoundwave.gif"}
-                        alt="soundwaves"
+                        alt=""
+                        aria-hidden="true"
                         style={{ height: "75px", width: "175px", objectFit: "cover" }}
                     />
                 </div>
