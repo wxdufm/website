@@ -1,20 +1,12 @@
 import React, {useState} from 'react'
 import Link from 'next/link'
-import DropdownMenu from './DropdownMenu'
 import photo from '../images/logo.png'
 import Image from 'next/image'
 import {AiOutlineMenu, AiOutlineClose} from 'react-icons/ai'
-import {Menu} from '@headlessui/react'
-import {IoIosArrowDown, IoIosArrowUp} from 'react-icons/io'
 import {useAudio} from './AudioContext'
 
 const Header = () => {
 	const {isPlaying, togglePlayPause} = useAudio()
-	const [submenuOpen, setSubmenuOpen] = useState(false)
-
-	const toggleSubmenu = () => {
-		setSubmenuOpen(!submenuOpen)
-	}
 
 	const [isOpen, setIsOpen] = useState(false)
 
@@ -44,62 +36,20 @@ const Header = () => {
 
 				{/* Collapsible menu for mobile*/}
 				{isOpen && (
-					<ul className="duration-450 h-screen w-screen flex-col justify-start bg-black/90 backdrop-blur-md transition-all ease-in-out md:gap-6">
-						<div className="w-full">
-							<Menu as="div" className="relative w-full">
-								<Menu.Button
-									onClick={toggleSubmenu}
-									className="ml-10 mt-16 flex h-8 text-3xl"
-								>
-									Listen
-									{submenuOpen ? (
-										<IoIosArrowUp size={24} className="ml-1 mt-2 md:ml-3" aria-hidden="true" />
-									) : (
-										<IoIosArrowDown size={24} className="ml-1 mt-2 md:ml-3" aria-hidden="true" />
-									)}
-								</Menu.Button>
-
-								{/* Submenu starts here */}
-								<div
-									className={`duration-450 my-5 ml-14 overflow-hidden text-2xl transition-all ease-in-out focus:outline-none focus:ring-0 md:text-3xl ${
-										submenuOpen ? 'max-h-[400px]' : 'max-h-0'
-									}`}
-								>
-
-									<div className="mb-2 flex w-full text-nowrap text-white">
-										<Menu.Item>
-											<Link
-												// webstream moved to its own page!
-												href="/listen"
-											>
-												Listen Here
-											</Link>
-										</Menu.Item>
-									</div>
-									<div className="mb-2 flex w-full text-nowrap text-white">
-											<Menu.Item>
-												<Link
-													href="https://wxdu.org"
-													target="_blank"
-													rel="noopener noreferrer"
-												>
-													Mobile app (wip)
-												</Link>
-										</Menu.Item>
-									</div>
-									{/* <div className="mb-2 flex w-full text-nowrap text-white">
-										<Menu.Item>
-											<Link
-												href="http://www.wxyc.info/playlists/recent"
-												target="_blank"
-											>
-												Live playlist
-											</Link>
-										</Menu.Item>
-									</div> */}
-								</div>
-								{/* Submenu ends here */}
-							</Menu>
+					<ul
+						className="duration-450 h-screen w-screen flex-col justify-start bg-black/90 backdrop-blur-md transition-all ease-in-out md:gap-6"
+						onClick={() => setIsOpen(false)}
+					>
+						<div className="ml-10 mt-16 flex h-8 text-3xl">
+							<Link
+								href="/listen"
+								legacyBehavior={false}
+								className="cursor-pointer"
+								rel="noopener noreferrer"
+								onClick={toggleMenu}
+							>
+								Listen
+							</Link>
 						</div>
 
 						<div className="ml-10 mt-8 flex h-8 text-3xl">
@@ -128,13 +78,13 @@ const Header = () => {
 
 						<div className="ml-10 mt-8 flex h-8 text-3xl">
 							<Link
-								href="/programming"
+								href="/schedule"
 								legacyBehavior={false}
 								className="cursor-pointer"
 								rel="noopener noreferrer"
 								onClick={toggleMenu}
 							>
-								Programming
+								Schedule
 							</Link>
 						</div>
 
@@ -224,8 +174,8 @@ const Header = () => {
 								About
 							</Link>
 
-							<Link href="/programming" legacyBehavior={false} className="flex h-12 grow items-center justify-center text-base text-white hover:text-blue-300">
-								Programming
+							<Link href="/schedule" legacyBehavior={false} className="flex h-12 grow items-center justify-center text-base text-white hover:text-blue-300">
+								Schedule
 							</Link>
 
 							<Link href="/charts" legacyBehavior={false} className="flex h-12 grow items-center justify-center text-base text-white hover:text-blue-300">
@@ -244,9 +194,9 @@ const Header = () => {
 								Contact
 							</Link>
 
-							<div className="flex h-12 grow items-center justify-center ">
-								<DropdownMenu />
-							</div>
+							<Link href="/listen" legacyBehavior={false} className="flex h-12 grow items-center justify-center text-base text-white hover:text-blue-300">
+								Listen
+							</Link>
 
 						</div>
 					</div>
