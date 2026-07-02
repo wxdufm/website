@@ -3,10 +3,11 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import useCurrentPlaylist from '@/hooks/useCurrentPlaylist'
-import NowPlayingHeader from "@/components/listenpage/NowPlayingHeader";
 import StreamButton from "@/components/audioplayers/StreamButton";
 import PlayTabs from "@/components/listenpage/PlayTabs";
 import ExploreTab from "@/components/listenpage/ExploreTab";
+import VinylPlayer from "@/components/homepage/VinylPlayer";
+import MobileVinylPlayer from "@/components/homepage/MobileVinylPlayer";
 import { useAudio } from "@/components/AudioContext";
 
 export default function Listen() {
@@ -16,7 +17,17 @@ export default function Listen() {
 
     return(
         <div className="min-h-screen text-white pb-2">
-            <NowPlayingHeader currentPlaylist={currentPlaylist} />
+            <div className="flex flex-col items-center gap-4 px-4 pt-4 pb-6">
+                <div className="hidden w-full max-w-3xl lg:block">
+                    <VinylPlayer />
+                </div>
+                <div className="w-full max-w-md lg:hidden">
+                    <MobileVinylPlayer />
+                </div>
+                <div className="w-full max-w-md lg:max-w-3xl">
+                    <StreamButton />
+                </div>
+            </div>
 
             <p className="text-center mt-2">
                 <Link href="/listen/past-10-days/" legacyBehavior={false} className="underline hover:no-underline text-gray-300">
