@@ -7,11 +7,12 @@ import HomepageBanner from '../components/HomepageBanner'
 import Link from 'next/link'
 import photo from '../images/logo.png'
 import Image from 'next/image'
-import StreamButton from '../components/audioplayers/StreamButton'
 import VinylPlayer from '../components/homepage/VinylPlayer'
 import MobileVinylPlayer from '../components/homepage/MobileVinylPlayer'
 import TodaySchedule from '../components/homepage/TodaySchedule'
 import ShowCalendar from "../components/homepage/ShowCalendar"
+import NowPlayingHeader from '../components/listenpage/NowPlayingHeader'
+import useCurrentPlaylist from '../hooks/useCurrentPlaylist'
 
 
 // home page
@@ -28,6 +29,8 @@ export default function Home(props) {
 	const posts = props.data.blogConnection.edges
 	const events = props.data.archiveConnection.edges
 	const schedule = props.schedule
+	// current show/DJ info shown under the vinyl widget (same data as /listen)
+	const { currentPlaylist } = useCurrentPlaylist()
 
 	return (
 		<div>
@@ -42,12 +45,14 @@ export default function Home(props) {
 						{/* Actual header text */}
 						<div className="flex w-full flex-col items-center justify-center md:w-3/4 md:pt-4 lg:w-full lg:pt-1">
 							<div className="mt-4 flex flex-row justify-between gap-4 items-start px-2 w-full" style={{ zoom: 1.1 }}>
-								<div className="flex-[5]">
+								<div className="flex-[1]">
 									<TodaySchedule schedule={schedule} />
 								</div>
-								<div className="flex flex-col items-end gap-2 flex-[2]" style={{ zoom: 0.85 }}>
+								{/* 1:1 split — title, then current show info, then the vinyl widget */}
+								<div className="flex flex-col items-stretch gap-2 flex-[1]">
+									<h1 className="bitcount w-full text-center lg:text-left text-2xl lg:text-5xl text-white">Now Playing</h1>
+									<NowPlayingHeader currentPlaylist={currentPlaylist} />
 									<VinylPlayer />
-									<StreamButton />
 							</div>
 							</div>
 						</div>
@@ -58,7 +63,6 @@ export default function Home(props) {
 			{/* Mobile layout — hidden on desktop */}
 			<div className="lg:hidden flex flex-col items-center gap-8 px-8 pt-1 pb-16">
 				<div className="flex flex-col items-center gap-2 w-full">
-					<StreamButton />
 					<MobileVinylPlayer />
 				</div>
 				<TodaySchedule schedule={schedule} />

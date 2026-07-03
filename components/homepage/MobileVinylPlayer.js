@@ -1,27 +1,31 @@
 /* eslint-disable @next/next/no-img-element -- the turntable layers are absolutely
    positioned by percentage and images are unoptimized in next.config, so next/image
    would add complexity for no benefit. */
+import { useRouter } from 'next/router'
 import cardinalsFallback from '../../images/cardinals.jpg'
 import { useNowPlaying } from '../../lib/useNowPlaying'
 import { useAudio } from '../AudioContext'
+import StreamButton from '../audioplayers/StreamButton'
 
 // Mobile-only vinyl player: turntable stacked on top, text panel + button below,
 // per the "Mobile Vinyl Player" Figma layout (node 8:2).
 export default function MobileVinylPlayer() {
   const { song, loading } = useNowPlaying()
-  const { isPlaying, togglePlayPause } = useAudio()
+  const { isPlaying } = useAudio()
+  const router = useRouter()
+  const goToListen = () => router.push('/listen')
 
   return (
     <div
-      className="relative mx-auto w-full max-w-md cursor-pointer select-none focus:outline-none focus-visible:outline-none"
+      className="relative mx-auto w-full max-w-[35rem] cursor-pointer select-none focus:outline-none focus-visible:outline-none"
       role="button"
       tabIndex={0}
-      aria-label={isPlaying ? 'Pause stream' : 'Play stream'}
-      onClick={togglePlayPause}
+      aria-label="Go to listen page"
+      onClick={goToListen}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault()
-          togglePlayPause()
+          goToListen()
         }
       }}
     >
@@ -80,6 +84,7 @@ export default function MobileVinylPlayer() {
                 {/* Label hidden for now — felt too busy. Re-enable by uncommenting: */}
                 {/* {song.label && <div className="hyphens-auto break-words font-courierprime text-[3.2vw] leading-tight text-white">🏷️ {song.label}</div>} */}
               </div>
+              <StreamButton />
             </>
           )}
         </div>
