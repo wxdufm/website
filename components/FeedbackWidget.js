@@ -197,7 +197,7 @@ export default function FeedbackWidget() {
                         maxLength={2000}
                         placeholder="The site is cool, weird, fun, busted, etc."
                     />
-                    <p className="font-courierprime mt-1 text-xs text-gray-500">
+                    <p className="font-courierprime mt-1 text-xs text-gray-300">
                         We attach basic browser info (no personal data) to help us reproduce issues.
                     </p>
                 </div>
