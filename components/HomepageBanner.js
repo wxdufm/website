@@ -1,11 +1,31 @@
-import React, {useState} from 'react'
+import React, {useState, useEffect} from 'react'
 import {IoIosCloseCircle} from 'react-icons/io'
 import logo from '../images/logo.png'
 import {useAudio} from './AudioContext'
 
+// Returns true once the viewport is at least `px` wide. Starts false on the
+// server and on first client render (so SSR/hydration match), then flips after
+// mount. We use it to keep the mobile-hidden collage columns OUT of the DOM on
+// small screens — a `display:none` <img> still downloads, so phones would
+// otherwise pay for images they never see. Tailwind's `lg` breakpoint = 1024px.
+const useMinWidth = (px) => {
+	const [matches, setMatches] = useState(false)
+	useEffect(() => {
+		const mq = window.matchMedia(`(min-width: ${px}px)`)
+		const update = () => setMatches(mq.matches)
+		update()
+		mq.addEventListener('change', update)
+		return () => mq.removeEventListener('change', update)
+	}, [px])
+	return matches
+}
+
 const Banner = ({columns = [], aboveLogo = [], belowLogo = []}) => {
 	const [isClosed, setIsClosed] = useState(false)
 	const {isPlaying, togglePlayPause} = useAudio()
+	// Extra collage columns are `hidden lg:flex` (desktop-only). Gate their actual
+	// rendering on this so mobile never downloads them; see useMinWidth above.
+	const isDesktop = useMinWidth(1024)
 
 	if (isClosed || columns.length === 0) {
 		return null
@@ -25,6 +45,12 @@ const Banner = ({columns = [], aboveLogo = [], belowLogo = []}) => {
 			<img
 				src={item.image}
 				alt={item.alt || `Image ${imgIndex + 1}`}
+				// The collage is the above-the-fold hero, so load eagerly — lazy
+				// loading left visible edge tiles blank. decoding="async" still keeps
+				// image decode off the main thread so the page stays responsive.
+				// (The mobile-hidden columns don't render at all — see isDesktop below —
+				// so phones still avoid downloading what they can't see.)
+				decoding="async"
 				className="w-full h-auto rounded-lg md:rounded-3xl"
 			/>
 		)
@@ -59,15 +85,19 @@ const Banner = ({columns = [], aboveLogo = [], belowLogo = []}) => {
 						WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 15%, black 90%, transparent 100%)',
 					}}
 				>
-					{leftColumns.map((column, colIndex) => (
-						<div key={colIndex} className={`flex-1 flex flex-col gap-1 md:gap-3 ${colIndex > 0 ? 'hidden lg:flex' : ''}`}>
-							{column.images?.map((item, imgIndex) => (
-								<div key={imgIndex} className="flex-shrink-0 overflow-hidden rounded-lg md:rounded-3xl bg-neutral-800">
-									{renderBannerImage(item, imgIndex)}
-								</div>
-							))}
-						</div>
-					))}
+					{leftColumns.map((column, colIndex) => {
+						// colIndex > 0 columns are desktop-only; don't render (or download) on mobile.
+						if (colIndex > 0 && !isDesktop) return null
+						return (
+							<div key={colIndex} className={`flex-1 flex flex-col gap-1 md:gap-3 ${colIndex > 0 ? 'hidden lg:flex' : ''}`}>
+								{column.images?.map((item, imgIndex) => (
+									<div key={imgIndex} className="flex-shrink-0 overflow-hidden rounded-lg md:rounded-3xl bg-neutral-800">
+										{renderBannerImage(item, imgIndex)}
+									</div>
+								))}
+							</div>
+						)
+					})}
 				</div>
 
 				<div
@@ -136,15 +166,19 @@ const Banner = ({columns = [], aboveLogo = [], belowLogo = []}) => {
 						WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 15%, black 90%, transparent 100%)',
 					}}
 				>
-					{rightColumns.map((column, colIndex) => (
-						<div key={colIndex} className={`flex-1 flex flex-col gap-1 md:gap-3 ${colIndex > 0 ? 'hidden lg:flex' : ''}`}>
-							{column.images?.map((item, imgIndex) => (
-								<div key={imgIndex} className="flex-shrink-0 overflow-hidden rounded-lg md:rounded-3xl bg-neutral-800">
-									{renderBannerImage(item, imgIndex)}
-								</div>
-							))}
-						</div>
-					))}
+					{rightColumns.map((column, colIndex) => {
+						// colIndex > 0 columns are desktop-only; don't render (or download) on mobile.
+						if (colIndex > 0 && !isDesktop) return null
+						return (
+							<div key={colIndex} className={`flex-1 flex flex-col gap-1 md:gap-3 ${colIndex > 0 ? 'hidden lg:flex' : ''}`}>
+								{column.images?.map((item, imgIndex) => (
+									<div key={imgIndex} className="flex-shrink-0 overflow-hidden rounded-lg md:rounded-3xl bg-neutral-800">
+										{renderBannerImage(item, imgIndex)}
+									</div>
+								))}
+							</div>
+						)
+					})}
 				</div>
 			</div>
 		</div>
