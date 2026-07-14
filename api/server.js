@@ -12,6 +12,8 @@ const releases = require('./routes/releases');
 const events = require('./routes/events');
 const recenttracks = require('./routes/recenttracks');
 const charts = require('./routes/charts');
+const search = require('./routes/search');
+const { fixEncodingDeep } = require('./fixEncoding');
 
 const app = express();
 
@@ -23,6 +25,16 @@ app.set('trust proxy', 1);
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || '').split(',').map((o) => o.trim());
 
 app.use(express.json());
+
+// Repair legacy latin1/CP1252 mojibake (and decode HTML entities) on every JSON
+// response, so clients receive clean UTF-8 without each having to patch it. The
+// SSE stream in routes/playlists.js is handled separately (it writes raw, not
+// via res.json). See fixEncoding.js for the why.
+app.use((req, res, next) => {
+  const sendJson = res.json.bind(res);
+  res.json = (body) => sendJson(fixEncodingDeep(body));
+  next();
+});
 
 app.use(
   cors({
@@ -47,6 +59,7 @@ app.use('/api/releases', releases);
 app.use('/api/events', events);
 app.use('/api/recenttracks', recenttracks);
 app.use('/api/charts', charts);
+app.use('/api/search', search);
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 

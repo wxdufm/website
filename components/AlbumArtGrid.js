@@ -24,23 +24,32 @@ function makeSparkle(top, left) {
 }
 
 // Build a fresh, randomized set of sparkles so no two twinkles look the same.
-// Some are guaranteed to sit in the clear space just above and below the art
-// (where they stay legible over busy covers); the rest scatter over and around
-// the tile.
+// Some are guaranteed to sit in the clear space just above, below, and to either
+// side of the art (where they stay legible over busy covers); the rest scatter
+// over and around the tile.
 function makeSparkles() {
 	const sparkles = []
 
-	// 1–2 in the dark band above, and 1–2 below, spread across the art's width.
+	// 3–4 in the dark band above, and 3–4 below, spread across the art's width.
 	for (const above of [true, false]) {
-		const count = 1 + Math.floor(Math.random() * 2)
+		const count = 3 + Math.floor(Math.random() * 2)
 		for (let i = 0; i < count; i++) {
 			const top = above ? -(10 + Math.random() * 20) : 110 + Math.random() * 20
 			sparkles.push(makeSparkle(top, 10 + Math.random() * 80))
 		}
 	}
 
-	// 2–4 more scattered over and around the art (some spilling past the edges).
-	const overCount = 2 + Math.floor(Math.random() * 3)
+	// 3–4 just off the left edge, and 3–4 off the right, spread across the art's height.
+	for (const leftSide of [true, false]) {
+		const count = 3 + Math.floor(Math.random() * 2)
+		for (let i = 0; i < count; i++) {
+			const left = leftSide ? -(10 + Math.random() * 20) : 110 + Math.random() * 20
+			sparkles.push(makeSparkle(10 + Math.random() * 80, left))
+		}
+	}
+
+	// 5–8 more scattered over and around the art (some spilling past the edges).
+	const overCount = 5 + Math.floor(Math.random() * 4)
 	for (let i = 0; i < overCount; i++) {
 		sparkles.push(makeSparkle(Math.random() * 120 - 10, Math.random() * 120 - 10))
 	}
@@ -73,7 +82,13 @@ export default function AlbumArtGrid({ albums, onAlbumClick, sparkleKey, sparkle
 						title={`${album.artist} — ${album.album}`}
 						// Make the tile a query container so sparkles can size in cqw.
 						style={{ containerType: 'inline-size' }}
-						className="relative aspect-square overflow-visible rounded border-0 bg-transparent p-0 cursor-pointer transition-transform duration-150 hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#e0ff05]"
+						// While twinkling, lift the tile above its neighbors so the
+						// sparkles that spill past its RIGHT edge (and the scattered ones)
+						// paint over the adjacent tile instead of being hidden behind it —
+						// later grid siblings otherwise stack on top by DOM order.
+						className={`relative aspect-square overflow-visible rounded border-0 bg-transparent p-0 cursor-pointer transition-transform duration-150 hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#e0ff05] ${
+							sparkling ? 'z-20' : ''
+						}`}
 					>
 						<img
 							src={album.cover || FILLER_IMAGE}
