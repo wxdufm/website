@@ -100,7 +100,11 @@ const fragment = /* glsl */ `
   void main() {
     // PIXEL POSITION: vUv is 0..1 across the screen; scale up to actual pixel coordinates so
     // uSize (a pixel value, matching the old p5 grid cell size) means the same thing here. Ex: vUv gives a random number, and this function says which pixel number it is at.
-    vec2 fragCoord = vUv * uResolution;
+    // Measure Y from the TOP (vUv.y=1 at top): the canvas is position:fixed at top:0, so on
+    // resize the top-left corner stays put on screen while the bottom edge moves. Anchoring the
+    // grid to that stable top-left corner is what stops the pattern from "jumping" on mobile,
+    // where scrolling shows/hides the URL bar and fires a resize with a changed innerHeight.
+    vec2 fragCoord = vec2(vUv.x, 1.0 - vUv.y) * uResolution;
 
     // BG COLOR: the background hue drifts over time only (no spatial input), so it's the same
     // for every pixel this frame. Rather than re-run simplex noise + hsb2rgb in all ~millions of
@@ -248,7 +252,7 @@ export default function AnimatedBackgroundShader({ size = 17, animate = true }) 
 
     let renderer, program, mesh, canvas
     let rafId = null
-    let onResize, onVisibilityChange
+    let onResize, onActivityChange
     let destroyed = false
 
     // ogl only touches the DOM/WebGL context, so it's loaded dynamically to keep it
@@ -325,8 +329,16 @@ export default function AnimatedBackgroundShader({ size = 17, animate = true }) 
         renderFrame()
       }
 
+      // The visualization should only run while the user is actually looking at the
+      // page. "Active" means the tab is visible AND the window has focus, so we stop
+      // not only when the tab is hidden (switched tab/app, phone locked) but also when
+      // the window merely loses focus (another window on top) — nothing to render for
+      // someone who isn't looking, same spirit as not keeping the stream warm for a
+      // listener who's navigated away.
+      const isActive = () => !document.hidden && document.hasFocus()
+
       const startLoop = () => {
-        if (rafId || document.hidden) return
+        if (rafId || !isActive()) return
         lastTs = null // don't count time spent stopped as elapsed animation
         rafId = requestAnimationFrame(update)
       }
@@ -343,19 +355,31 @@ export default function AnimatedBackgroundShader({ size = 17, animate = true }) 
       // is already playing at mount (or once it starts, via the animate-prop effect above).
       if (animateRef.current) startLoop()
 
-      // Pause the loop while the tab is hidden; resume only if we're still meant to animate.
-      onVisibilityChange = () => {
-        if (document.hidden) stopLoop()
-        else if (animateRef.current) startLoop()
+      // Re-sync the loop to activity: stop the instant the page goes hidden or loses
+      // focus, resume only once it's active again and we're still meant to animate.
+      // visibilitychange covers tab/app switches and phone lock; blur/focus cover a
+      // still-visible window losing or regaining focus.
+      onActivityChange = () => {
+        if (isActive()) {
+          if (animateRef.current) startLoop()
+        } else {
+          stopLoop()
+        }
       }
-      document.addEventListener('visibilitychange', onVisibilityChange)
+      document.addEventListener('visibilitychange', onActivityChange)
+      window.addEventListener('blur', onActivityChange)
+      window.addEventListener('focus', onActivityChange)
     })
 
     return () => {
       destroyed = true
       if (rafId) cancelAnimationFrame(rafId)
       if (onResize) window.removeEventListener('resize', onResize)
-      if (onVisibilityChange) document.removeEventListener('visibilitychange', onVisibilityChange)
+      if (onActivityChange) {
+        document.removeEventListener('visibilitychange', onActivityChange)
+        window.removeEventListener('blur', onActivityChange)
+        window.removeEventListener('focus', onActivityChange)
+      }
       controlsRef.current = null
       if (canvas && canvas.parentNode) canvas.parentNode.removeChild(canvas)
     }
