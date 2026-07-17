@@ -225,7 +225,7 @@ const BASE_TIME_SCALE = 0.25
 // no such global singularity and is unaffected by the offset.)
 const HUE_START_OFFSET = 36
 
-export default function AnimatedBackgroundShader({ size = 17, brightness = 0.42, speed = 8 }) {
+export default function AnimatedBackgroundShader({ size = 17, brightness = 0.6, saturation = 0.75, speed = 8 }) {
   const containerRef = useRef(null)
   const [supported, setSupported] = useState(true)
 
@@ -299,7 +299,7 @@ export default function AnimatedBackgroundShader({ size = 17, brightness = 0.42,
           uTime: { value: 0 },
           uResolution: { value: [window.innerWidth, window.innerHeight] },
           uSize: { value: size },
-          uBgColor: { value: hsb2rgb(0.5, 0.4, brightness) },
+          uBgColor: { value: hsb2rgb(0.5, saturation, brightness) },
           uNoiseTex: { value: noiseTexture },
         },
       })
@@ -321,7 +321,7 @@ export default function AnimatedBackgroundShader({ size = 17, brightness = 0.42,
       const renderFrame = () => {
         program.uniforms.uTime.value = animTime
         const bgHue = snoise3(animTime * 0.03, 0, 0) * 0.5 + 0.5
-        program.uniforms.uBgColor.value = hsb2rgb(bgHue, 0.4, brightness)
+        program.uniforms.uBgColor.value = hsb2rgb(bgHue, saturation, brightness)
         renderer.render({ scene: mesh })
       }
 
@@ -388,7 +388,7 @@ export default function AnimatedBackgroundShader({ size = 17, brightness = 0.42,
       }
       if (canvas && canvas.parentNode) canvas.parentNode.removeChild(canvas)
     }
-  }, [size, brightness, speed])
+  }, [size, brightness, saturation, speed])
 
   // If WebGL2 creation failed (e.g. failIfMajorPerformanceCaveat rejected a
   // software-rendering fallback), render a plain static background instead of
