@@ -1,6 +1,6 @@
 import { useBackground } from './BackgroundContext'
 import AnimatedBackgroundShader from './AnimatedBackgroundShader'
-import MobileAnimatedBackgroundShader from './MobileAnimatedBackgroundShader'
+
 
 // The fixed, GPU-shader animated background that sits behind every page. Split out of
 // _app so it can read the footer's on/off toggle (backgroundEnabled) — the graphic
@@ -16,7 +16,7 @@ export default function SiteBackground() {
                 <AnimatedBackgroundShader size={17} />
             </div>
             <div className="lg:hidden">
-                <MobileAnimatedBackgroundShader />
+                <AnimatedBackgroundShader size={12} />
             </div>
             {/* Global legibility scrim: one semi-transparent black layer over the whole
                 animated background so text is readable everywhere, instead of per-section
