@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 // GPU-shader version of AnimatedBackgroundInverted: same visual (black squares whose
 // size drifts with noise, over a slowly-cycling muted HSB background) but the whole
@@ -28,72 +28,47 @@ const fragment = /* glsl */ `
   uniform vec2 uResolution;
   uniform float uSize;
   uniform vec3 uBgColor;
+  uniform sampler2D uNoiseTex;
   varying vec2 vUv;
 
-  // Simplex 3D noise (Ashima Arts / Ian McEwan, webgl-noise) for smooth effect
-  vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
-  vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
-  vec4 permute(vec4 x) { return mod289(((x * 34.0) + 1.0) * x); }
-  vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
+  const float INV_NOISE_TEX_SIZE = 0.00390625; // 1.0 / 256.0, must match the JS-side noise texture size
 
-  float snoise(vec3 v) {
-    const vec2 C = vec2(1.0 / 6.0, 1.0 / 3.0);
-    const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+  // Texture-lookup hash: trades the old simplex noise's long permute/mod289/
+  // taylorInvSqrt ALU chain for a cheap texture fetch, which is generally
+  // faster on integrated/weaker GPUs where texture units are separate from
+  // (and less contended than) the ALU pipeline doing everything else on screen.
+  float hash(vec3 p) {
+    vec2 uv = (p.xy + p.z * 37.0) * INV_NOISE_TEX_SIZE;
+    return texture2D(uNoiseTex, uv).x;
+  }
 
-    vec3 i  = floor(v + dot(v, C.yyy));
-    vec3 x0 = v - i + dot(i, C.xxx);
+  // Trilinearly-interpolated value noise using the hash above in place of a
+  // gradient noise; same smoothstep-based interpolation shape as classic Perlin.
+  float snoise(vec3 p) {
+    vec3 i = floor(p);
+    vec3 f = p - i;
+    f = f * f * (3.0 - 2.0 * f);
 
-    vec3 g = step(x0.yzx, x0.xyz);
-    vec3 l = 1.0 - g;
-    vec3 i1 = min(g.xyz, l.zxy);
-    vec3 i2 = max(g.xyz, l.zxy);
+    float n000 = hash(i + vec3(0.0, 0.0, 0.0));
+    float n100 = hash(i + vec3(1.0, 0.0, 0.0));
+    float n010 = hash(i + vec3(0.0, 1.0, 0.0));
+    float n110 = hash(i + vec3(1.0, 1.0, 0.0));
+    float n001 = hash(i + vec3(0.0, 0.0, 1.0));
+    float n101 = hash(i + vec3(1.0, 0.0, 1.0));
+    float n011 = hash(i + vec3(0.0, 1.0, 1.0));
+    float n111 = hash(i + vec3(1.0, 1.0, 1.0));
 
-    vec3 x1 = x0 - i1 + C.xxx;
-    vec3 x2 = x0 - i2 + C.yyy;
-    vec3 x3 = x0 - D.yyy;
+    float x00 = mix(n000, n100, f.x);
+    float x10 = mix(n010, n110, f.x);
+    float x01 = mix(n001, n101, f.x);
+    float x11 = mix(n011, n111, f.x);
 
-    i = mod289(i);
-    vec4 p = permute(permute(permute(
-              i.z + vec4(0.0, i1.z, i2.z, 1.0))
-            + i.y + vec4(0.0, i1.y, i2.y, 1.0))
-            + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+    float y0 = mix(x00, x10, f.y);
+    float y1 = mix(x01, x11, f.y);
 
-    float n_ = 0.142857142857;
-    vec3 ns = n_ * D.wyz - D.xzx;
-
-    vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
-
-    vec4 x_ = floor(j * ns.z);
-    vec4 y_ = floor(j - 7.0 * x_);
-
-    vec4 x = x_ * ns.x + ns.yyyy;
-    vec4 y = y_ * ns.x + ns.yyyy;
-    vec4 h = 1.0 - abs(x) - abs(y);
-
-    vec4 b0 = vec4(x.xy, y.xy);
-    vec4 b1 = vec4(x.zw, y.zw);
-
-    vec4 s0 = floor(b0) * 2.0 + 1.0;
-    vec4 s1 = floor(b1) * 2.0 + 1.0;
-    vec4 sh = -step(h, vec4(0.0));
-
-    vec4 a0 = b0.xzyw + s0.xzyw * sh.xxyy;
-    vec4 a1 = b1.xzyw + s1.xzyw * sh.zzww;
-
-    vec3 p0 = vec3(a0.xy, h.x);
-    vec3 p1 = vec3(a0.zw, h.y);
-    vec3 p2 = vec3(a1.xy, h.z);
-    vec3 p3 = vec3(a1.zw, h.w);
-
-    vec4 norm = taylorInvSqrt(vec4(dot(p0, p0), dot(p1, p1), dot(p2, p2), dot(p3, p3)));
-    p0 *= norm.x;
-    p1 *= norm.y;
-    p2 *= norm.z;
-    p3 *= norm.w;
-
-    vec4 m = max(0.6 - vec4(dot(x0, x0), dot(x1, x1), dot(x2, x2), dot(x3, x3)), 0.0);
-    m = m * m;
-    return 42.0 * dot(m * m, vec4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3)));
+    // Remap 0..1 value noise into -1..1 to match the old snoise's output range,
+    // since downstream code (*0.5+0.5 etc.) expects that range.
+    return mix(y0, y1, f.z) * 2.0 - 1.0;
   }
 
   // main p5.js sketch replacement below
@@ -107,9 +82,9 @@ const fragment = /* glsl */ `
     vec2 fragCoord = vec2(vUv.x, 1.0 - vUv.y) * uResolution;
 
     // BG COLOR: the background hue drifts over time only (no spatial input), so it's the same
-    // for every pixel this frame. Rather than re-run simplex noise + hsb2rgb in all ~millions of
+    // for every pixel this frame. Rather than re-run noise + hsb2rgb in all ~millions of
     // pixels, it's computed once per frame on the CPU (see snoise3/hsb2rgb below) and passed in
-    // as uBgColor — one continuous color wash, same as the old p.noise(bgOff).
+    // as uBgColor: one continuous color wash, same as the old p.noise(bgOff).
     vec3 bgColor = uBgColor;
 
 
@@ -140,7 +115,7 @@ const fragment = /* glsl */ `
 
 // --- CPU ports of the two GLSL helpers, used only for the spatially-constant background
 // color (computed once per frame instead of once per pixel). Faithful ports of the same
-// Ashima simplex noise + hsb2rgb above, so the wash looks identical to the old per-pixel path.
+// Ashima simplex noise + hsb2rgb, so the wash looks identical to the old per-pixel path.
 function mod289(x) { return x - Math.floor(x * (1 / 289)) * 289 }
 function permute(x) { return mod289((x * 34 + 1) * x) }
 function taylorInvSqrt(r) { return 1.79284291400159 - 0.85373472095314 * r }
@@ -213,62 +188,113 @@ function hsb2rgb(hue, sat, bri) {
   })
 }
 
-// Animation drift speed as a fraction of real time — lower is slower. The square/color
-// motion reads best well below real time, and slowing it also thins GPU work a little more.
-const TIME_SCALE = 0.4
+// Seeded so the noise texture (and thus the square-size pattern) is consistent
+// across reloads instead of reshuffling every mount.
+function seededRandom(seed) {
+  const x = Math.sin(seed) * 10000
+  return x - Math.floor(x)
+}
+
+// Small tileable RGBA hash texture read by the shader's hash()/snoise() in place of the
+// old ALU-heavy simplex noise chain — cheap texture-cache fetches beat per-pixel vector
+// math on integrated/weaker GPUs, where texture units aren't contended by the rest of
+// the shader's ALU work.
+function createNoiseTextureData(size = 256) {
+  const seed = Math.random()
+  const data = new Uint8Array(size * size * 4)
+  for (let i = 0; i < size * size; i++) {
+    data[i * 4 + 0] = seededRandom(seed + i * 0.001) * 255
+    data[i * 4 + 1] = seededRandom(seed + i * 0.001 + 1000) * 255
+    data[i * 4 + 2] = seededRandom(seed + i * 0.001 + 2000) * 255
+    data[i * 4 + 3] = 255
+  }
+  return data
+}
+
+// Base animation drift speed as a fraction of real time, multiplied by the `speed` prop
+// (default 1.6) so the default effective rate matches the previous fixed 0.4 scale while
+// still being tunable. Kept well below real time so the drift reads as gentle, not jumpy.
+const BASE_TIME_SCALE = 0.25
 
 // The background hue samples the noise at a single point (animTime), and animTime=0 lands
 // on a lattice point where the noise has a sharp dip (green) with a very steep slope right
 // beside it. Starting there means the first ~2s of drift rushes green->blue before settling
 // into the gentle roll everywhere else. Start past that singularity, at a spot that's also
-// green but on a gentle slope, so the paused frame rests green and drifting eases smoothly
-// green->blue instead of snapping. (The square-size noise samples per-cell, so it has no
-// such global singularity and is unaffected by the offset.)
+// green but on a gentle slope, so a freshly-mounted background rests green and drifting eases
+// smoothly green->blue instead of snapping. (The square-size noise samples per-cell, so it has
+// no such global singularity and is unaffected by the offset.)
 const HUE_START_OFFSET = 36
 
-export default function AnimatedBackgroundShader({ size = 17, animate = true }) {
+export default function AnimatedBackgroundShader({ size = 17, brightness = 0.6, saturation = 0.75, speed = 8 }) {
   const containerRef = useRef(null)
-  // Latest desired animate state + the running loop's start/stop handles. Kept in refs so
-  // starting/stopping the drift on play/pause never tears down and rebuilds the GL context.
-  const animateRef = useRef(animate)
-  const controlsRef = useRef(null)
-
-  // Start or stop the drift when playback starts/stops. The loop controls only exist after
-  // the async ogl import resolves; until then this just records the intent in animateRef,
-  // which the setup effect reads once it's ready.
-  useEffect(() => {
-    animateRef.current = animate
-    const controls = controlsRef.current
-    if (!controls) return
-    if (animate) controls.start()
-    else controls.stop()
-  }, [animate])
+  const [supported, setSupported] = useState(true)
+  const [reducedMotion, setReducedMotion] = useState(false)
 
   useEffect(() => {
     // Respect the OS-level reduced-motion setting: skip mounting the canvas
     // entirely rather than rendering a static frame, since users who set this
-    // are opting out of the animation, not just wanting it to hold still.
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    // are opting out of the animation, not just wanting it to hold still. Render
+    // the same solid-black static fallback as the unsupported-GPU path (below) so
+    // both non-animated cases look identical instead of leaving a transparent gap.
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setReducedMotion(true)
+      return
+    }
 
     let renderer, program, mesh, canvas
     let rafId = null
+    let resizeRafId = null
     let onResize, onActivityChange
     let destroyed = false
 
     // ogl only touches the DOM/WebGL context, so it's loaded dynamically to keep it
     // out of the SSR bundle entirely — same reasoning as the old p5 dynamic import.
-    import('ogl').then(({ Renderer, Program, Mesh, Triangle }) => {
+    import('ogl').then(({ Renderer, Program, Mesh, Triangle, Texture }) => {
       // effect cleanup can fire before this promise resolves (fast route change); bail out
       // rather than mounting a canvas into a container that's already gone.
       if (destroyed || !containerRef.current) return
 
+      // Probe context creation ourselves first with failIfMajorPerformanceCaveat: if the
+      // browser would otherwise silently fall back to a software rasterizer (e.g. because
+      // of a blocklisted GPU driver), this throws/returns null instead — so we can bail to
+      // a static background rather than "GPU shader" actually running on the CPU every frame.
+      // ogl's Renderer doesn't expose this flag, so create+check a context manually first;
+      // the canvas keeps the same context when Renderer calls getContext on it again below.
+      canvas = document.createElement('canvas')
+      let probeGl = null
+      try {
+        probeGl = canvas.getContext('webgl2', {
+          alpha: false,
+          antialias: false,
+          powerPreference: 'low-power',
+          failIfMajorPerformanceCaveat: true,
+        })
+      } catch {
+        probeGl = null
+      }
+      if (!probeGl) {
+        setSupported(false)
+        return
+      }
+
       // dpr: 1 skips retina's 4x pixel fill; antialias: false is redundant work since
       // the shader already anti-aliases its own square edges via smoothstep.
-      renderer = new Renderer({ dpr: 1, alpha: false, antialias: false })
+      renderer = new Renderer({ canvas, dpr: 1, alpha: false, antialias: false, powerPreference: 'low-power' })
       const gl = renderer.gl
-      canvas = gl.canvas
       canvas.style.display = 'block'
       containerRef.current.appendChild(canvas)
+
+      const noiseSize = 256
+      const noiseTexture = new Texture(gl, {
+        image: createNoiseTextureData(noiseSize),
+        width: noiseSize,
+        height: noiseSize,
+        wrapS: gl.REPEAT,
+        wrapT: gl.REPEAT,
+        minFilter: gl.LINEAR,
+        magFilter: gl.LINEAR,
+        generateMipmaps: false,
+      })
 
       // One triangle, one shader program, one mesh; the entire "scene" is a single
       // draw call every frame, vs. thousands of individual rect() calls in the old version.
@@ -280,7 +306,8 @@ export default function AnimatedBackgroundShader({ size = 17, animate = true }) 
           uTime: { value: 0 },
           uResolution: { value: [window.innerWidth, window.innerHeight] },
           uSize: { value: size },
-          uBgColor: { value: hsb2rgb(0.5, 0.4, 0.55) },
+          uBgColor: { value: hsb2rgb(0.5, saturation, brightness) },
+          uNoiseTex: { value: noiseTexture },
         },
       })
       mesh = new Mesh(gl, { geometry, program })
@@ -291,32 +318,43 @@ export default function AnimatedBackgroundShader({ size = 17, animate = true }) 
       // rAF/compositing CPU cost and the GPU shading load (what spins fans on integrated GPUs).
       const targetFps = 30
       const frameInterval = 1000 / targetFps
-      // Accumulated *animation* seconds — advances only while the loop runs, so pausing freezes
-      // the current frame and resuming picks up where it left off rather than jumping forward by
-      // the time spent paused. TIME_SCALE slows the drift relative to real time.
+      // Accumulated *animation* seconds, advanced by the loop below at `speed` * BASE_TIME_SCALE
+      // relative to real time.
       let animTime = HUE_START_OFFSET
       let lastTs = null
 
       // Draw one frame at the current animTime. Called by the loop, on resize, and once up
-      // front, so a paused (or never-played) background still shows a static frame, not blank.
+      // front, so the background shows a frame immediately rather than staying blank.
       const renderFrame = () => {
         program.uniforms.uTime.value = animTime
         const bgHue = snoise3(animTime * 0.03, 0, 0) * 0.5 + 0.5
-        program.uniforms.uBgColor.value = hsb2rgb(bgHue, 0.4, 0.55)
+        program.uniforms.uBgColor.value = hsb2rgb(bgHue, saturation, brightness)
         renderer.render({ scene: mesh })
       }
 
       // Resize the GL framebuffer + tell the shader the new pixel dimensions (uResolution) so
-      // grid cells stay screen-space-sized, then repaint. The repaint matters while paused:
-      // resizing a WebGL canvas clears it and the loop isn't running to redraw it, so without
-      // this the background would blank on resize until playback resumes.
-      const resize = () => {
-        renderer.setSize(window.innerWidth, window.innerHeight)
+      // grid cells stay screen-space-sized, then repaint. The repaint matters because resizing
+      // a WebGL canvas clears it, and the loop may be stopped (tab hidden) when it fires.
+      let lastW = 0, lastH = 0
+      const applyResize = () => {
+        resizeRafId = null
+        const w = window.innerWidth, h = window.innerHeight
+        // Skip no-op events: mobile fires resize on scroll even when nothing changed.
+        if (w === lastW && h === lastH) return
+        lastW = w; lastH = h
+        renderer.setSize(w, h)
         program.uniforms.uResolution.value = [gl.canvas.width, gl.canvas.height]
         renderFrame()
       }
+      // Coalesce resize events into at most one framebuffer resize per frame. Mobile browsers
+      // fire a *storm* of resize events while the URL bar collapses during scroll; handling each
+      // one synchronously reallocates the GL framebuffer on the main thread and can stutter the
+      // very scroll that triggered it. Batching to a single rAF caps it at one realloc per frame.
+      const resize = () => {
+        if (resizeRafId === null) resizeRafId = requestAnimationFrame(applyResize)
+      }
       onResize = resize
-      resize()
+      applyResize() // initial sizing + first paint, synchronously (before the loop starts)
       window.addEventListener('resize', onResize)
 
       const update = (t) => {
@@ -325,17 +363,16 @@ export default function AnimatedBackgroundShader({ size = 17, animate = true }) 
         const elapsed = t - lastTs
         if (elapsed < frameInterval) return
         lastTs = t - (elapsed % frameInterval)
-        animTime += (elapsed / 1000) * TIME_SCALE
+        animTime += (elapsed / 1000) * BASE_TIME_SCALE * speed
         renderFrame()
       }
 
-      // The visualization should only run while the user is actually looking at the
-      // page. "Active" means the tab is visible AND the window has focus, so we stop
-      // not only when the tab is hidden (switched tab/app, phone locked) but also when
-      // the window merely loses focus (another window on top) — nothing to render for
-      // someone who isn't looking, same spirit as not keeping the stream warm for a
-      // listener who's navigated away.
-      const isActive = () => !document.hidden && document.hasFocus()
+      // The visualization should only run while the tab is actually visible — nothing
+      // to render for a hidden/backgrounded tab (switched tab/app, phone locked). Unlike
+      // an earlier version, this does NOT pause on window blur: devtools or another
+      // window merely stealing OS focus shouldn't freeze a background that's still on
+      // screen and visible to the user.
+      const isActive = () => !document.hidden
 
       const startLoop = () => {
         if (rafId || !isActive()) return
@@ -348,42 +385,60 @@ export default function AnimatedBackgroundShader({ size = 17, animate = true }) 
           rafId = null
         }
       }
-      // Expose the handles so the animate-prop effect (play/pause) can gate the loop.
-      controlsRef.current = { start: startLoop, stop: stopLoop }
 
-      // resize() above already painted the initial frame; start drifting only if the stream
-      // is already playing at mount (or once it starts, via the animate-prop effect above).
-      if (animateRef.current) startLoop()
+      // resize() above already painted the initial frame; the background always drifts
+      // once mounted (mounting/unmounting is what the on/off toggle controls).
+      startLoop()
 
-      // Re-sync the loop to activity: stop the instant the page goes hidden or loses
-      // focus, resume only once it's active again and we're still meant to animate.
-      // visibilitychange covers tab/app switches and phone lock; blur/focus cover a
-      // still-visible window losing or regaining focus.
+      // Re-sync the loop to tab visibility: stop the instant the tab is hidden, resume
+      // once it's visible again.
       onActivityChange = () => {
-        if (isActive()) {
-          if (animateRef.current) startLoop()
-        } else {
-          stopLoop()
-        }
+        if (isActive()) startLoop()
+        else stopLoop()
       }
       document.addEventListener('visibilitychange', onActivityChange)
-      window.addEventListener('blur', onActivityChange)
-      window.addEventListener('focus', onActivityChange)
     })
 
     return () => {
       destroyed = true
       if (rafId) cancelAnimationFrame(rafId)
+      if (resizeRafId) cancelAnimationFrame(resizeRafId)
       if (onResize) window.removeEventListener('resize', onResize)
       if (onActivityChange) {
         document.removeEventListener('visibilitychange', onActivityChange)
-        window.removeEventListener('blur', onActivityChange)
-        window.removeEventListener('focus', onActivityChange)
       }
-      controlsRef.current = null
+      // Explicitly drop the WebGL context so its GPU resources are freed now rather than
+      // waiting on GC. The footer toggle unmounts/remounts this component, and browsers cap
+      // the number of live WebGL contexts (~16) — without this, repeated toggling leaks
+      // contexts until the browser starts killing the oldest ones.
+      if (renderer) {
+        const loseCtx = renderer.gl.getExtension('WEBGL_lose_context')
+        if (loseCtx) loseCtx.loseContext()
+      }
       if (canvas && canvas.parentNode) canvas.parentNode.removeChild(canvas)
     }
-  }, [size])
+  }, [size, brightness, saturation, speed])
+
+  // If WebGL2 creation failed (e.g. failIfMajorPerformanceCaveat rejected a
+  // software-rendering fallback), or the user has reduced-motion set, render a
+  // plain static background instead of silently paying for a fullscreen shader
+  // running on the CPU (or animating against the user's stated preference).
+  if (!supported || reducedMotion) {
+    return (
+      <div
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          zIndex: 0,
+          backgroundColor: '#000000',
+          pointerEvents: 'none',
+        }}
+      />
+    )
+  }
 
   return (
     <div
