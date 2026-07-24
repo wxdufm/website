@@ -5,8 +5,10 @@ cover: /uploads/How to Play the Banjo Vol. 1 LIVE on WXDU.png
 categories:
   - category: content/category/artist-interview.md
 published: 2026-07-05T04:00:00.000Z
-description: 'https://wxdu.org/short/banjo'
+description: ''
 ---
+
+[https://wxdu.org/short/banjo](https://wxdu.org/short/banjo)
 
 In this special interview Joseph Decosimo teaches our DJs godzilian & southpawpaw, as well as all of our listeners, how to play the banjo! In it you can listen to Joseph share about the history of the banjo, oldtime & how vibrant the scene in NC is today, teaching stories from growing up in Tennessee on the Cumberland Plateau, playing all night where the sun never sets, and his favorite Eno River swimming holes. He also plays some beautiful old tunes the way his friends and teachers did them & shares new tracks from his [latest album Beehive Cathedral](https://josephdecosimo.bandcamp.com/album/beehive-cathedral "Beehive Cathedral").
 
